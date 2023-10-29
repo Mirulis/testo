@@ -1,5 +1,7 @@
 import pandas as pd
 import numpy as np
+import matplotlib.pyplot as plt
+
 import torch
 import scipy.misc
 from torchvision import transforms
@@ -24,6 +26,16 @@ def load_data(path=data_path, name=data_name[0]):
     print(len(dataList))
     return dataList
 
+def z_score(data):
+    print('z_score:')
+    data = np.asarray(data)
+    mean = np.mean(data, axis=0)
+    std = np.std(data, axis=0)
+    data = (data-mean)/std
+    data = data.tolist()
+    print(data[0])
+    return data
+
 def create_dataset(path=data_path, name=data_name[0]):
     print('creating dataset:')
     dataList = load_data(path, name) 
@@ -33,6 +45,8 @@ def create_dataset(path=data_path, name=data_name[0]):
     for i in range(len(y)):
         y[i] = int(y[i])-3
     x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.25, random_state=42)
+    x_train = z_score(x_train)
+    x_test = z_score(x_test)
     print(len(x_train), len(x_test))
     return x_train, y_train, x_test, y_test, len(x_train), len(x_test)
 
@@ -55,9 +69,9 @@ class WineDataset(Dataset):
     def __len__(self):
         return len(self.label)
 
-def wineDataLoader(length, test_rate, Resize, batch_size):
+def wineDataLoader(length, test_rate, Resize, batch_size, name=data_name[0]):
     print('constructing data loader')
-    train_data_self, train_data_label, test_data_self, test_data_label, train_len, test_len = create_dataset()
+    train_data_self, train_data_label, test_data_self, test_data_label, train_len, test_len = create_dataset(name=name)
     train_data_self = change_data_type(train_data_self)
     for i in range(len(train_data_label)):
         train_data_label[i] = [train_data_label[i]]
@@ -76,21 +90,20 @@ def wineDataLoader(length, test_rate, Resize, batch_size):
 class LeNet(nn.Module):
     def __init__(self):
         super().__init__()
-        self.linear1 = nn.Linear(in_features=11,out_features=11,bias=True)
-        self.linear2 = nn.Linear(in_features=11,out_features=11,bias=True)
-        self.linear3 = nn.Linear(11, 6)
+        self.linear1 = nn.Linear(in_features=11,out_features=22,bias=True)
+        self.linear2 = nn.Linear(in_features=22,out_features=23,bias=True)
+        self.linear3 = nn.Linear(23, 7)
 
     def forward(self, x):
-        x = F.relu(self.linear1(x))
-        x = F.relu(self.linear2(x))
+        x = F.tanh(self.linear1(x))
+        x = F.tanh(self.linear2(x))
         x = self.linear3(x)
         return x
 
-def train(train_loader, train_len):
+def train(train_loader, train_len, epoches=50):
     # 学习率0.001
     learning_rate = 1e-3
     batch_size = 100
-    epoches = 50
 
     lenet = LeNet()
 
@@ -117,12 +130,34 @@ def train(train_loader, train_len):
  
         running_loss/=train_len
         running_acc/=train_len
+        plt.plot(i, running_loss, 'b.')
         print("[%d/%d] Loss: %.5f, Acc: %.2f" % (i + 1, epoches, running_loss,100 * running_acc))
+
+    plt.show()
 
     return lenet
 
+def test(test_loader, test_len, lenet):
+    lenet.eval()
+    correct = 0
+    total = 0
+    with torch.no_grad():
+        for (data, label) in test_loader:
+            label = label.squeeze(1)
+            label = label.type(torch.LongTensor)
+            output = lenet(data)
+            _,predict=torch.max(output,1)
+            correct += (predict == label).sum().item()
+            total += label.size(0)
+    print('Accuracy on test set: %d %%' % (100 * correct / total))
+
 if __name__ == '__main__':
-    train_loader, test_loader, train_len, test_len = wineDataLoader(100, 0.25, 0.5, 100)
+    train_loader, test_loader, train_len, test_len = wineDataLoader(100, 0.25, 0.5, 100, name=data_name[0])
+
+
+    lenet = train(train_loader, train_len, 1200)
+    test(test_loader, test_len, lenet)
+    
 
 
     lenet = train(train_loader, train_len)
