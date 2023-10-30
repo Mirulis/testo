@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from collections.abc import Callable
 
 import torch
@@ -31,7 +33,7 @@ class TaylorSeries(nn.Module):
         linear_features.append(1)
 
         self.fc = nn.ModuleList(
-            nn.Linear(features[i], features[i + 1]) for i in range(len(linear_features) - 1)
+            nn.Linear(linear_features[i], linear_features[i + 1]) for i in range(len(linear_features) - 1)
         )
 
         self.activation = activation or (lambda t: t)
@@ -41,4 +43,4 @@ class TaylorSeries(nn.Module):
         x = torch.pow(x.unsqueeze(-1), self.exponent)
         for linear in self.fc[:-1]:
             x = self.activation(self.dropout(linear(x)))
-        return self.fc[-1](x)
+        return self.fc[-1](x).squeeze(-1)
