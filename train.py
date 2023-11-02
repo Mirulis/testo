@@ -1,13 +1,15 @@
 from __future__ import annotations
 
-from collections.abc import Iterable
 
 import torch
-from matplotlib import pyplot as plt
+
+from tqdm import trange
 from torch.nn import Module
 from torch.optim import Optimizer
 from torch.utils.data import DataLoader
-from tqdm import trange
+from torch.optim.lr_scheduler import LRScheduler
+from matplotlib import pyplot as plt
+from collections.abc import Iterable
 
 
 def single_train(
@@ -15,6 +17,7 @@ def single_train(
     model: Module,
     criterion: Module,
     optimizer: Optimizer,
+    scheduler: LRScheduler,
     device: str,
 ):
     losses = []
@@ -27,6 +30,7 @@ def single_train(
         loss.backward()
         losses.append(loss.detach().item())
         optimizer.step()
+    scheduler.step()
     return sum(losses) / len(losses)
 
 
@@ -36,6 +40,7 @@ def early_stopping(
     model: Module,
     criterion: Module,
     optimizer: Optimizer,
+    scheduler: LRScheduler,
     device: str,
     patience: int = 5,
     max_epoch: int = 10000,
@@ -49,7 +54,9 @@ def early_stopping(
     for epoch in process:
         process.set_description(f"Epoch {epoch + 1}:")
         train_losses.append(
-            single_train(train_dataloader, model, criterion, optimizer, device)
+            single_train(
+                train_dataloader, model, criterion, optimizer, scheduler, device
+            )
         )
         model.eval()
         eval_loss = 0.0
@@ -76,6 +83,7 @@ def draw_loss_curve(**keyed_loss: Iterable[float]):
     plt.figure(figsize=(24, 4))
     color_step = 1 / len(keyed_loss)
     for i, (key, losses) in enumerate(keyed_loss.items()):
+        # noinspection PyTypeChecker
         plt.plot(losses, label=key, color=(i * color_step, 0.5, 1 - i * color_step))
     plt.xlabel("Epoch")
     plt.ylabel("Loss")
@@ -91,10 +99,12 @@ def test(loader: DataLoader, model: Module):
         correct = 0
         total = 0
         for data, labels in loader:
-            correct += torch.sum(
-                model(data).argmax(dim=1) == labels.argmax(dim=1)
-            ).item()
+            output = model(data)
+            compare_result = (
+                torch.max(labels, dim=1).indices == torch.max(output, dim=1).indices
+            )
+            # noinspection PyTypeChecker
+            correct += torch.sum(compare_result).item()
             total += labels.size(0)
     acc = 100 * correct / total
-    print(f"Accuracy on test set: {acc}%")
     return acc
